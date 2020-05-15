@@ -1,0 +1,4 @@
+avwx~=1.4
+httpx~=0.12
+kewkew~=0.1
+motor~=2.1

@@ -8,13 +8,14 @@ https://mesonet.agron.iastate.edu/request/download.phtml
 import asyncio as aio
 from datetime import date, datetime, timedelta
 from os import environ
-from typing import Iterator
+from typing import Dict
 
 # library
-import avwx
 import httpx
+from avwx.station import station_list
 from kewkew import Kew
 from motor import MotorClient
+from tqdm import tqdm
 
 
 END = date.today()
@@ -32,16 +33,22 @@ SOURCE = (
 )
 
 
-def stations(start: str = None) -> Iterator[avwx.Station]:
+class Bar:
     """
-    Iterate through reporting stations after an optional start point
+    tqdm wrapper for workers to share
     """
-    for icao in avwx.station._STATIONS:
-        if start and start >= icao:
-            continue
-        station = avwx.Station.from_icao(icao)
-        if station.reporting:
-            yield station
+
+    def set(self, total: int):
+        self._bar = tqdm(total=total)
+
+    def inc(self):
+        self._bar.update(1)
+
+    def close(self):
+        self._bar.close()
+
+
+BAR = Bar()
 
 
 def find_timestamp(report: str) -> str:
@@ -54,7 +61,7 @@ def find_timestamp(report: str) -> str:
     return None
 
 
-def parse_response(text: str) -> {str: dict}:
+def parse_response(text: str) -> Dict[str, dict]:
     """
     Returns valid reports from the raw response by date
 
@@ -93,7 +100,7 @@ class HistoryKew(Kew):
         """
         Fetches and updates historical reports for an ICAO ident
         """
-        print(icao)
+        BAR.inc()
         # Fetch records from NOAA
         url = SOURCE.format(
             icao, START.year, START.month, START.day, END.year, END.month, END.day,
@@ -123,9 +130,12 @@ async def main():
     """
     mdb = MotorClient(environ["MONGO_URI"])
     kew = HistoryKew(mdb)
-    for station in stations():
-        await kew.add(station.icao)
+    stations = station_list()
+    BAR.set(len(stations))
+    for icao in stations:
+        await kew.add(icao)
     await kew.finish()
+    BAR.close()
 
 
 if __name__ == "__main__":

@@ -8,18 +8,18 @@ https://mesonet.agron.iastate.edu/request/download.phtml
 import asyncio as aio
 from datetime import date, datetime, timedelta
 from os import environ
-from typing import Dict
+from typing import Dict, List
 
 # library
 import httpx
-from avwx.station import station_list
 from kewkew import Kew
 from motor import MotorClient
 from tqdm import tqdm
+from avwx.station import station_list
 
 
 END = date.today()
-DAYS_TO_GO_BACK = 2
+DAYS_TO_GO_BACK = 5
 
 
 START = END - timedelta(days=DAYS_TO_GO_BACK)
@@ -122,6 +122,15 @@ class HistoryKew(Kew):
             data = {**find, "raw": data}
             await self.mdb.history.metar.update_one(find, {"$set": data}, upsert=True)
         return True
+
+
+def failed_stations() -> List[str]:
+    """
+    Returns the ICAO list of failed stations from the generated tsv file
+    """
+    with open("failed.tsv") as fin:
+        stations = [l.split("\t")[0] for l in fin.readlines()]
+    return stations
 
 
 async def main():
